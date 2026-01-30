@@ -1,0 +1,22 @@
+{
+  "name": "niceplace.github.io",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "bun build src/earth.ts --outdir dist --target browser",
+    "dev": "bun --watch src/earth.ts",
+    "test": "bun run test.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^25.1.0",
+    "puppeteer": "^24.36.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "three": "^0.182.0"
+  }
+}
