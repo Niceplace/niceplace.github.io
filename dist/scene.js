@@ -25428,7 +25428,7 @@ function createCosmos() {
   distantStars = createDistantStars();
   closeStars = createCloseStars();
   closeStars.mesh.position.set(0, 0, 0);
-  distantStars.mesh.position.set(0, 0, 0);
+  distantStars.position.set(0, 0, 0);
   scene.add(distantStars, closeStars.mesh);
 }
 function createMarsPlanet() {

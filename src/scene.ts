@@ -128,7 +128,7 @@ function createCosmos(): void {
     distantStars = createDistantStars();
     closeStars = createCloseStars();
     closeStars.mesh.position.set(0, 0, 0);
-    distantStars.mesh.position.set(0, 0, 0);
+    distantStars.position.set(0, 0, 0);  // distantStars IS the mesh, not an object with .mesh
     scene.add(distantStars, closeStars.mesh);
 }
 

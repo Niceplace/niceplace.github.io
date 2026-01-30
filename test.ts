@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer';
 
-const url = 'https://niceplace.github.io';
+const url = process.argv[2] || 'https://niceplace.github.io';
 
 interface ConsoleMessage {
     type: string;
@@ -25,7 +25,7 @@ async function runTests(): Promise<void> {
 
     const page = await browser.newPage();
 
-    // Capture console messages
+    // Capture ALL console messages
     const consoleMessages: ConsoleMessage[] = [];
     page.on('console', (msg) => {
         consoleMessages.push({
@@ -33,6 +33,15 @@ async function runTests(): Promise<void> {
             text: msg.text(),
             location: msg.location(),
         });
+        // Also log to terminal immediately for debugging
+        const icon = {
+            'error': '✗',
+            'warning': '⚠',
+            'log': '•',
+            'info': 'ℹ',
+            'debug': '◦'
+        }[msg.type()] || '?';
+        console.log(`${icon} [${msg.type().toUpperCase()}] ${msg.text()}`);
     });
 
     // Capture network requests
@@ -55,74 +64,68 @@ async function runTests(): Promise<void> {
         }
     });
 
+    page.on('requestfailed', (request) => {
+        const req = networkRequests.find(r => r.url === request.url());
+        if (req) {
+            req.success = false;
+            req.status = 0;
+        }
+        console.log(`✗ [NETWORK FAILED] ${request.failure()?.errorText} - ${request.url()}`);
+    });
+
     try {
         const response = await page.goto(url, {
-            waitUntil: 'networkidle2',
+            waitUntil: 'networkidle0',
             timeout: 30000,
         });
 
-        console.log(`Page loaded with status: ${response?.status()}\n`);
+        console.log(`\nPage loaded with status: ${response?.status()}`);
 
-        // Wait a bit for any delayed errors
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait for animations to start
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         // Check for canvas element
-        const canvas = await page.$('#myCanvas');
-        if (canvas) {
-            console.log('✓ Canvas element found\n');
-        } else {
-            console.log('✗ Canvas element NOT found\n');
-        }
+        const canvasInfo = await page.evaluate(() => {
+            const canvas = document.getElementById('myCanvas');
+            if (!canvas) return { exists: false, webgl: false };
 
-        // Check console messages
-        console.log('=== Console Messages ===');
+            const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+            return {
+                exists: true,
+                webgl: !!gl,
+                width: canvas.width,
+                height: canvas.height
+            };
+        });
+
+        console.log(`\n=== Canvas Info ===`);
+        console.log(`Exists: ${canvasInfo.exists}`);
+        console.log(`WebGL context: ${canvasInfo.webgl}`);
+        console.log(`Size: ${canvasInfo.width}x${canvasInfo.height}`);
+
+        // Summary
         const errors = consoleMessages.filter(m => m.type === 'error');
         const warnings = consoleMessages.filter(m => m.type === 'warning');
+        const failedRequests = networkRequests.filter(r => !r.success && !r.url.includes('favicon'));
 
-        if (errors.length === 0 && warnings.length === 0) {
-            console.log('✓ No errors or warnings in console\n');
-        } else {
-            console.log(`Found ${errors.length} error(s) and ${warnings.length} warning(s):\n`);
-            errors.forEach(err => {
-                console.log(`  [ERROR] ${err.text}`);
-                if (err.location) {
-                    console.log(`    at ${err.location.url}:${err.location.lineNumber}:${err.location.columnNumber}`);
-                }
-            });
-            warnings.forEach(warn => {
-                console.log(`  [WARN] ${warn.text}`);
-            });
-            console.log('');
-        }
+        console.log(`\n=== Summary ===`);
+        console.log(`Console errors: ${errors.length}`);
+        console.log(`Console warnings: ${warnings.length}`);
+        console.log(`Failed network requests: ${failedRequests.length}`);
 
-        // Check network requests
-        console.log('=== Network Requests ===');
-        const failedRequests = networkRequests.filter(r => r.status && r.status >= 400 && !r.url.includes('favicon.ico'));
-        const successRequests = networkRequests.filter(r => r.status && r.status < 400);
-
-        console.log(`Total requests: ${networkRequests.length}`);
-        console.log(`Successful: ${successRequests.length}`);
-        console.log(`Failed: ${failedRequests.length}\n`);
-
-        if (failedRequests.length > 0) {
-            console.log('Failed requests:');
-            failedRequests.forEach(req => {
-                console.log(`  [${req.status}] ${req.method} ${req.url}`);
-            });
-            console.log('');
-        }
-
-        // Final verdict
-        if (errors.length === 0 && failedRequests.length === 0) {
-            console.log('✓ ALL TESTS PASSED - Page is working correctly!\n');
-            process.exit(0);
-        } else {
-            console.log('✗ TESTS FAILED - See errors above\n');
+        if (errors.length > 0) {
+            console.log(`\n✗ TESTS FAILED - ${errors.length} error(s) found\n`);
             process.exit(1);
+        } else if (failedRequests.length > 0) {
+            console.log(`\n✗ TESTS FAILED - ${failedRequests.length} network request(s) failed\n`);
+            process.exit(1);
+        } else {
+            console.log(`\n✓ ALL TESTS PASSED\n`);
+            process.exit(0);
         }
 
     } catch (error) {
-        console.error('Error loading page:', error);
+        console.error('\n✗ Error loading page:', error);
         process.exit(1);
     } finally {
         await browser.close();
