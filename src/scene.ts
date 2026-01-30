@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
 "use strict";
 
@@ -32,6 +33,15 @@ let saturnMaterial: THREE.MeshPhongMaterial; // For color animation
 
 // Character arrays for orbiting
 const characters: { mesh: THREE.Object3D; pivot: THREE.Object3D; speed: number }[] = [];
+
+// Llama state for orbiting between planets
+let spaceLlama: THREE.Object3D;
+let llamaState: 'orbitingSaturn' | 'travelingToMars' | 'orbitingMars' | 'travelingToSaturn';
+let llamaOrbitAngle: number = 0;
+let llamaTravelProgress: number = 0;
+let llamaOrbitTimer: number = 0;
+const ORBIT_DURATION = 360; // ~6 seconds at 60fps
+const ORBIT_RADIUS = 100; // Distance from planet center
 
 // Star objects
 let closeStars: { mesh: THREE.Object3D; mat: THREE.MeshPhongMaterial };
@@ -163,8 +173,8 @@ function createCosmos(): void {
 function createMarsPlanet(): THREE.Object3D {
     const mesh = new THREE.Object3D();
 
-    // Main sphere - reddish orange
-    const marsGeom = new THREE.DodecahedronGeometry(40, 2);
+    // Main sphere - reddish orange (15% larger)
+    const marsGeom = new THREE.DodecahedronGeometry(46, 2);
     const marsMat = new THREE.MeshPhongMaterial({
         shininess: 15,
         color: 0xC1440E, // Mars red
@@ -227,8 +237,8 @@ function createMarsPlanet(): THREE.Object3D {
 function createSaturnPlanet(): THREE.Object3D {
     const mesh = new THREE.Object3D();
 
-    // Main sphere - will have animated color
-    const saturnGeom = new THREE.DodecahedronGeometry(70, 2);
+    // Main sphere - will have animated color (15% larger: 70 * 1.15 = 80.5)
+    const saturnGeom = new THREE.DodecahedronGeometry(80.5, 2);
     saturnMaterial = new THREE.MeshPhongMaterial({
         shininess: 25,
         color: 0xFF6B9D, // Start with pink
@@ -239,8 +249,8 @@ function createSaturnPlanet(): THREE.Object3D {
     saturnSphere.castShadow = true;
     mesh.add(saturnSphere);
 
-    // Ring system
-    const ringGeom = new THREE.RingGeometry(85, 110, 32);
+    // Ring system (15% larger)
+    const ringGeom = new THREE.RingGeometry(98, 127, 32);
     const pos = ringGeom.attributes.position;
     const uv = ringGeom.attributes.uv;
 
@@ -249,7 +259,7 @@ function createSaturnPlanet(): THREE.Object3D {
         const x = pos.getX(i);
         const y = pos.getY(i);
         const radius = Math.sqrt(x * x + y * y);
-        uv.setXY(i, (radius - 85) / 25, 0);
+        uv.setXY(i, (radius - 98) / 29, 0);
     }
 
     const ringMat = new THREE.MeshPhongMaterial({
@@ -264,8 +274,8 @@ function createSaturnPlanet(): THREE.Object3D {
     ring.rotation.x = Math.PI / 2.5; // Tilt the ring
     mesh.add(ring);
 
-    // Add a second inner ring for detail
-    const innerRingGeom = new THREE.RingGeometry(75, 82, 24);
+    // Add a second inner ring for detail (15% larger)
+    const innerRingGeom = new THREE.RingGeometry(86, 94, 24);
     const innerRingMat = new THREE.MeshPhongMaterial({
         shininess: 30,
         color: 0xFFB347, // Amber accent
@@ -502,6 +512,125 @@ function createHedgehog(): THREE.Object3D {
     return mesh;
 }
 
+// === ROCKET (for llama's back) ===
+function createRocket(): THREE.Object3D {
+    const rocket = new THREE.Object3D();
+
+    // Main body - silver cylinder
+    const bodyGeom = new THREE.CylinderGeometry(1.5, 1.5, 6, 8);
+    const bodyMat = new THREE.MeshPhongMaterial({
+        shininess: 80,
+        color: 0xC0C0C0, // Silver
+        flatShading: true
+    });
+    const body = new THREE.Mesh(bodyGeom, bodyMat);
+    body.rotation.z = Math.PI / 2; // Point along X axis
+    rocket.add(body);
+
+    // Nose cone - orange
+    const noseGeom = new THREE.ConeGeometry(1.5, 3, 8);
+    const noseMat = new THREE.MeshPhongMaterial({
+        shininess: 50,
+        color: 0xFF6600, // Orange
+        flatShading: true
+    });
+    const nose = new THREE.Mesh(noseGeom, noseMat);
+    nose.rotation.z = -Math.PI / 2; // Point forward
+    nose.position.x = 4.5;
+    rocket.add(nose);
+
+    // Fins - 4 triangular fins
+    const finGeom = new THREE.ConeGeometry(1.5, 3, 4);
+    const finMat = new THREE.MeshPhongMaterial({
+        shininess: 30,
+        color: 0xFF3300, // Red-orange
+        flatShading: true
+    });
+
+    // Top fin
+    const finTop = new THREE.Mesh(finGeom, finMat);
+    finTop.position.set(-2, 1.5, 0);
+    finTop.rotation.z = Math.PI / 2;
+    rocket.add(finTop);
+
+    // Bottom fin
+    const finBottom = new THREE.Mesh(finGeom, finMat);
+    finBottom.position.set(-2, -1.5, 0);
+    finBottom.rotation.z = Math.PI / 2;
+    rocket.add(finBottom);
+
+    // Left fin
+    const finLeft = new THREE.Mesh(finGeom, finMat);
+    finLeft.position.set(-2, 0, 1.5);
+    finLeft.rotation.y = Math.PI / 2;
+    finLeft.rotation.z = Math.PI / 2;
+    rocket.add(finLeft);
+
+    // Right fin
+    const finRight = new THREE.Mesh(finGeom, finMat);
+    finRight.position.set(-2, 0, -1.5);
+    finRight.rotation.y = Math.PI / 2;
+    finRight.rotation.z = Math.PI / 2;
+    rocket.add(finRight);
+
+    return rocket;
+}
+
+// === SPACE LLAMA ===
+async function createSpaceLlama(): Promise<THREE.Object3D> {
+    const loader = new STLLoader();
+    const geometry = await loader.loadAsync('assets/3d_llama.stl');
+
+    // Optimize geometry by merging vertices (reduces file size and improves performance)
+    const optimizedGeometry = mergeVertices(geometry, 0.1);
+
+    // Compute normals for proper lighting
+    optimizedGeometry.computeVertexNormals();
+
+    // White material for the llama
+    const llamaMat = new THREE.MeshPhongMaterial({
+        shininess: 30,
+        color: 0xffffff, // White
+        flatShading: true
+    });
+
+    const llama = new THREE.Mesh(optimizedGeometry, llamaMat);
+    llama.castShadow = true;
+    llama.receiveShadow = true;
+
+    // Scale appropriately (STL files often need significant scaling)
+    llama.scale.set(0.15, 0.15, 0.15);
+
+    // Rotate to face forward
+    llama.rotation.y = Math.PI;
+
+    // Add pink accents for flesh (nose, inner ears)
+    // Create small pink spheres for visible flesh areas
+    const fleshMat = new THREE.MeshPhongMaterial({
+        shininess: 40,
+        color: 0xFF69B4, // Bright pink
+        flatShading: true
+    });
+
+    // Nose - positioned at front of face
+    const noseGeom = new THREE.SphereGeometry(1.5, 8, 8);
+    const nose = new THREE.Mesh(noseGeom, fleshMat);
+    nose.position.set(0, 2, 8);
+    llama.add(nose);
+
+    // Create a group to hold llama and rocket
+    const llamaGroup = new THREE.Object3D();
+    llamaGroup.add(llama);
+
+    // Add rocket on llama's back
+    const rocket = createRocket();
+    rocket.position.set(0, 8, -3); // Position on back
+    rocket.scale.set(1.5, 1.5, 1.5); // Scale appropriately
+    llamaGroup.add(rocket);
+
+    return llamaGroup;
+}
+
 // === CREATE CHARACTERS ===
 // === ADD CHARACTERS TO MARS POLES ===
 function addCharactersToMars(): void {
@@ -616,7 +745,131 @@ function initScene(): void {
     // Create characters orbiting Saturn
     createCharacters();
 
+    // Load and add space llama
+    llamaState = 'orbitingSaturn';
+    llamaOrbitAngle = 0;
+    createSpaceLlama().then((llama) => {
+        spaceLlama = llama;
+        scene.add(spaceLlama);
+        // Set initial position
+        spaceLlama.position.set(saturnX + ORBIT_RADIUS, saturnY, -80);
+    });
+
     render();
+}
+
+// === UPDATE LLAMA ANIMATION ===
+function updateLlama(): void {
+    if (!spaceLlama || !saturnPlanet || !marsPlanet) return;
+
+    const saturnPos = saturnPlanet.position.clone();
+    const marsPos = marsPlanet.position.clone();
+
+    switch (llamaState) {
+        case 'orbitingSaturn':
+            // Orbit around Saturn
+            llamaOrbitAngle += 0.02;
+            spaceLlama.position.x = saturnPos.x + Math.cos(llamaOrbitAngle) * ORBIT_RADIUS;
+            spaceLlama.position.y = saturnPos.y + Math.sin(llamaOrbitAngle) * ORBIT_RADIUS * 0.3;
+            spaceLlama.position.z = saturnPos.z + 20;
+            spaceLlama.rotation.y = llamaOrbitAngle + Math.PI / 2;
+            llamaOrbitTimer++;
+            if (llamaOrbitTimer > ORBIT_DURATION) {
+                llamaState = 'travelingToMars';
+                llamaTravelProgress = 0;
+                llamaOrbitTimer = 0;
+            }
+            break;
+
+        case 'travelingToMars':
+            // Travel along curved arc from Saturn to Mars
+            llamaTravelProgress += 0.01;
+            const t = Math.min(llamaTravelProgress, 1);
+
+            // Quadratic Bézier curve
+            // p0 = start (Saturn), p2 = end (Mars), p1 = control point
+            const p0 = saturnPos.clone();
+            const p2 = marsPos.clone();
+            const p1 = new THREE.Vector3(
+                (p0.x + p2.x) / 2,
+                (p0.y + p2.y) / 2 + 150, // Arc upward
+                p0.z - 50 // Arc backward slightly
+            );
+
+            // Bézier interpolation: (1-t)²*p0 + 2(1-t)t*p1 + t²*p2
+            const invT = 1 - t;
+            spaceLlama.position.x = invT * invT * p0.x + 2 * invT * t * p1.x + t * t * p2.x;
+            spaceLlama.position.y = invT * invT * p0.y + 2 * invT * t * p1.y + t * t * p2.y;
+            spaceLlama.position.z = invT * invT * p0.z + 2 * invT * t * p1.z + t * t * p2.z;
+
+            // Face direction of travel
+            const nextT = Math.min(t + 0.01, 1);
+            const nextInvT = 1 - nextT;
+            const nextPos = new THREE.Vector3(
+                nextInvT * nextInvT * p0.x + 2 * nextInvT * nextT * p1.x + nextT * nextT * p2.x,
+                nextInvT * nextInvT * p0.y + 2 * nextInvT * nextT * p1.y + nextT * nextT * p2.y,
+                nextInvT * nextInvT * p0.z + 2 * nextInvT * nextT * p1.z + nextT * nextT * p2.z
+            );
+            spaceLlama.lookAt(nextPos);
+
+            if (t >= 1) {
+                llamaState = 'orbitingMars';
+                llamaOrbitAngle = 0;
+                llamaOrbitTimer = 0;
+            }
+            break;
+
+        case 'orbitingMars':
+            // Orbit around Mars
+            llamaOrbitAngle += 0.02;
+            spaceLlama.position.x = marsPos.x + Math.cos(llamaOrbitAngle) * ORBIT_RADIUS * 0.7;
+            spaceLlama.position.y = marsPos.y + Math.sin(llamaOrbitAngle) * ORBIT_RADIUS * 0.3;
+            spaceLlama.position.z = marsPos.z + 20;
+            spaceLlama.rotation.y = llamaOrbitAngle + Math.PI / 2;
+            llamaOrbitTimer++;
+            if (llamaOrbitTimer > ORBIT_DURATION) {
+                llamaState = 'travelingToSaturn';
+                llamaTravelProgress = 0;
+                llamaOrbitTimer = 0;
+            }
+            break;
+
+        case 'travelingToSaturn':
+            // Travel along curved arc from Mars to Saturn
+            llamaTravelProgress += 0.01;
+            const t2 = Math.min(llamaTravelProgress, 1);
+
+            // Quadratic Bézier curve (reverse direction)
+            const p0_2 = marsPos.clone();
+            const p2_2 = saturnPos.clone();
+            const p1_2 = new THREE.Vector3(
+                (p0_2.x + p2_2.x) / 2,
+                (p0_2.y + p2_2.y) / 2 - 150, // Arc downward this time
+                p0_2.z - 50 // Arc backward slightly
+            );
+
+            const invT2 = 1 - t2;
+            spaceLlama.position.x = invT2 * invT2 * p0_2.x + 2 * invT2 * t2 * p1_2.x + t2 * t2 * p2_2.x;
+            spaceLlama.position.y = invT2 * invT2 * p0_2.y + 2 * invT2 * t2 * p1_2.y + t2 * t2 * p2_2.y;
+            spaceLlama.position.z = invT2 * invT2 * p0_2.z + 2 * invT2 * t2 * p1_2.z + t2 * t2 * p2_2.z;
+
+            // Face direction of travel
+            const nextT2 = Math.min(t2 + 0.01, 1);
+            const nextInvT2 = 1 - nextT2;
+            const nextPos2 = new THREE.Vector3(
+                nextInvT2 * nextInvT2 * p0_2.x + 2 * nextInvT2 * nextT2 * p1_2.x + nextT2 * nextT2 * p2_2.x,
+                nextInvT2 * nextInvT2 * p0_2.y + 2 * nextInvT2 * nextT2 * p1_2.y + nextT2 * nextT2 * p2_2.y,
+                nextInvT2 * nextInvT2 * p0_2.z + 2 * nextInvT2 * nextT2 * p1_2.z + nextT2 * nextT2 * p2_2.z
+            );
+            spaceLlama.lookAt(nextPos2);
+
+            if (t2 >= 1) {
+                llamaState = 'orbitingSaturn';
+                llamaOrbitAngle = 0;
+                llamaOrbitTimer = 0;
+            }
+            break;
+    }
 }
 
 // === RENDER LOOP ===
@@ -648,6 +901,9 @@ function render(): void {
         // Characters also rotate on their own axis
         char.mesh.rotation.y += 0.01;
     });
+
+    // Animate space llama
+    updateLlama();
 
     renderer.render(scene, camera);
     requestAnimationFrame(render);

@@ -9709,6 +9709,27 @@ class VectorKeyframeTrack extends KeyframeTrack {
   }
 }
 VectorKeyframeTrack.prototype.ValueTypeName = "vector";
+var Cache = {
+  enabled: false,
+  files: {},
+  add: function(key, file) {
+    if (this.enabled === false)
+      return;
+    this.files[key] = file;
+  },
+  get: function(key) {
+    if (this.enabled === false)
+      return;
+    return this.files[key];
+  },
+  remove: function(key) {
+    delete this.files[key];
+  },
+  clear: function() {
+    this.files = {};
+  }
+};
+
 class LoadingManager {
   constructor(onLoad, onProgress, onError) {
     const scope = this;
@@ -9838,6 +9859,166 @@ class Loader {
   }
 }
 Loader.DEFAULT_MATERIAL_NAME = "__DEFAULT";
+var loading = {};
+
+class HttpError extends Error {
+  constructor(message, response) {
+    super(message);
+    this.response = response;
+  }
+}
+
+class FileLoader extends Loader {
+  constructor(manager) {
+    super(manager);
+    this.mimeType = "";
+    this.responseType = "";
+    this._abortController = new AbortController;
+  }
+  load(url, onLoad, onProgress, onError) {
+    if (url === undefined)
+      url = "";
+    if (this.path !== undefined)
+      url = this.path + url;
+    url = this.manager.resolveURL(url);
+    const cached = Cache.get(`file:${url}`);
+    if (cached !== undefined) {
+      this.manager.itemStart(url);
+      setTimeout(() => {
+        if (onLoad)
+          onLoad(cached);
+        this.manager.itemEnd(url);
+      }, 0);
+      return cached;
+    }
+    if (loading[url] !== undefined) {
+      loading[url].push({
+        onLoad,
+        onProgress,
+        onError
+      });
+      return;
+    }
+    loading[url] = [];
+    loading[url].push({
+      onLoad,
+      onProgress,
+      onError
+    });
+    const req = new Request(url, {
+      headers: new Headers(this.requestHeader),
+      credentials: this.withCredentials ? "include" : "same-origin",
+      signal: typeof AbortSignal.any === "function" ? AbortSignal.any([this._abortController.signal, this.manager.abortController.signal]) : this._abortController.signal
+    });
+    const mimeType = this.mimeType;
+    const responseType = this.responseType;
+    fetch(req).then((response) => {
+      if (response.status === 200 || response.status === 0) {
+        if (response.status === 0) {
+          warn("FileLoader: HTTP Status 0 received.");
+        }
+        if (typeof ReadableStream === "undefined" || response.body === undefined || response.body.getReader === undefined) {
+          return response;
+        }
+        const callbacks = loading[url];
+        const reader = response.body.getReader();
+        const contentLength = response.headers.get("X-File-Size") || response.headers.get("Content-Length");
+        const total = contentLength ? parseInt(contentLength) : 0;
+        const lengthComputable = total !== 0;
+        let loaded = 0;
+        const stream = new ReadableStream({
+          start(controller) {
+            readData();
+            function readData() {
+              reader.read().then(({ done, value }) => {
+                if (done) {
+                  controller.close();
+                } else {
+                  loaded += value.byteLength;
+                  const event = new ProgressEvent("progress", { lengthComputable, loaded, total });
+                  for (let i = 0, il = callbacks.length;i < il; i++) {
+                    const callback = callbacks[i];
+                    if (callback.onProgress)
+                      callback.onProgress(event);
+                  }
+                  controller.enqueue(value);
+                  readData();
+                }
+              }, (e) => {
+                controller.error(e);
+              });
+            }
+          }
+        });
+        return new Response(stream);
+      } else {
+        throw new HttpError(`fetch for "${response.url}" responded with ${response.status}: ${response.statusText}`, response);
+      }
+    }).then((response) => {
+      switch (responseType) {
+        case "arraybuffer":
+          return response.arrayBuffer();
+        case "blob":
+          return response.blob();
+        case "document":
+          return response.text().then((text) => {
+            const parser = new DOMParser;
+            return parser.parseFromString(text, mimeType);
+          });
+        case "json":
+          return response.json();
+        default:
+          if (mimeType === "") {
+            return response.text();
+          } else {
+            const re = /charset="?([^;"\s]*)"?/i;
+            const exec = re.exec(mimeType);
+            const label = exec && exec[1] ? exec[1].toLowerCase() : undefined;
+            const decoder = new TextDecoder(label);
+            return response.arrayBuffer().then((ab) => decoder.decode(ab));
+          }
+      }
+    }).then((data) => {
+      Cache.add(`file:${url}`, data);
+      const callbacks = loading[url];
+      delete loading[url];
+      for (let i = 0, il = callbacks.length;i < il; i++) {
+        const callback = callbacks[i];
+        if (callback.onLoad)
+          callback.onLoad(data);
+      }
+    }).catch((err) => {
+      const callbacks = loading[url];
+      if (callbacks === undefined) {
+        this.manager.itemError(url);
+        throw err;
+      }
+      delete loading[url];
+      for (let i = 0, il = callbacks.length;i < il; i++) {
+        const callback = callbacks[i];
+        if (callback.onError)
+          callback.onError(err);
+      }
+      this.manager.itemError(url);
+    }).finally(() => {
+      this.manager.itemEnd(url);
+    });
+    this.manager.itemStart(url);
+  }
+  setResponseType(value) {
+    this.responseType = value;
+    return this;
+  }
+  setMimeType(value) {
+    this.mimeType = value;
+    return this;
+  }
+  abort() {
+    this._abortController.abort();
+    this._abortController = new AbortController;
+    return this;
+  }
+}
 var _loading = new WeakMap;
 class Light extends Object3D {
   constructor(color, intensity = 1) {
@@ -25330,6 +25511,280 @@ class WebGLRenderer {
   }
 }
 
+// node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+function mergeVertices(geometry, tolerance = 0.0001) {
+  tolerance = Math.max(tolerance, Number.EPSILON);
+  const hashToIndex = {};
+  const indices = geometry.getIndex();
+  const positions = geometry.getAttribute("position");
+  const vertexCount = indices ? indices.count : positions.count;
+  let nextIndex = 0;
+  const attributeNames = Object.keys(geometry.attributes);
+  const tmpAttributes = {};
+  const tmpMorphAttributes = {};
+  const newIndices = [];
+  const getters = ["getX", "getY", "getZ", "getW"];
+  const setters = ["setX", "setY", "setZ", "setW"];
+  for (let i = 0, l = attributeNames.length;i < l; i++) {
+    const name = attributeNames[i];
+    const attr = geometry.attributes[name];
+    tmpAttributes[name] = new attr.constructor(new attr.array.constructor(attr.count * attr.itemSize), attr.itemSize, attr.normalized);
+    const morphAttributes = geometry.morphAttributes[name];
+    if (morphAttributes) {
+      if (!tmpMorphAttributes[name])
+        tmpMorphAttributes[name] = [];
+      morphAttributes.forEach((morphAttr, i2) => {
+        const array = new morphAttr.array.constructor(morphAttr.count * morphAttr.itemSize);
+        tmpMorphAttributes[name][i2] = new morphAttr.constructor(array, morphAttr.itemSize, morphAttr.normalized);
+      });
+    }
+  }
+  const halfTolerance = tolerance * 0.5;
+  const exponent = Math.log10(1 / tolerance);
+  const hashMultiplier = Math.pow(10, exponent);
+  const hashAdditive = halfTolerance * hashMultiplier;
+  for (let i = 0;i < vertexCount; i++) {
+    const index = indices ? indices.getX(i) : i;
+    let hash = "";
+    for (let j = 0, l = attributeNames.length;j < l; j++) {
+      const name = attributeNames[j];
+      const attribute = geometry.getAttribute(name);
+      const itemSize = attribute.itemSize;
+      for (let k = 0;k < itemSize; k++) {
+        hash += `${~~(attribute[getters[k]](index) * hashMultiplier + hashAdditive)},`;
+      }
+    }
+    if (hash in hashToIndex) {
+      newIndices.push(hashToIndex[hash]);
+    } else {
+      for (let j = 0, l = attributeNames.length;j < l; j++) {
+        const name = attributeNames[j];
+        const attribute = geometry.getAttribute(name);
+        const morphAttributes = geometry.morphAttributes[name];
+        const itemSize = attribute.itemSize;
+        const newArray = tmpAttributes[name];
+        const newMorphArrays = tmpMorphAttributes[name];
+        for (let k = 0;k < itemSize; k++) {
+          const getterFunc = getters[k];
+          const setterFunc = setters[k];
+          newArray[setterFunc](nextIndex, attribute[getterFunc](index));
+          if (morphAttributes) {
+            for (let m = 0, ml = morphAttributes.length;m < ml; m++) {
+              newMorphArrays[m][setterFunc](nextIndex, morphAttributes[m][getterFunc](index));
+            }
+          }
+        }
+      }
+      hashToIndex[hash] = nextIndex;
+      newIndices.push(nextIndex);
+      nextIndex++;
+    }
+  }
+  const result = geometry.clone();
+  for (const name in geometry.attributes) {
+    const tmpAttribute = tmpAttributes[name];
+    result.setAttribute(name, new tmpAttribute.constructor(tmpAttribute.array.slice(0, nextIndex * tmpAttribute.itemSize), tmpAttribute.itemSize, tmpAttribute.normalized));
+    if (!(name in tmpMorphAttributes))
+      continue;
+    for (let j = 0;j < tmpMorphAttributes[name].length; j++) {
+      const tmpMorphAttribute = tmpMorphAttributes[name][j];
+      result.morphAttributes[name][j] = new tmpMorphAttribute.constructor(tmpMorphAttribute.array.slice(0, nextIndex * tmpMorphAttribute.itemSize), tmpMorphAttribute.itemSize, tmpMorphAttribute.normalized);
+    }
+  }
+  result.setIndex(newIndices);
+  return result;
+}
+
+// node_modules/three/examples/jsm/loaders/STLLoader.js
+class STLLoader extends Loader {
+  constructor(manager) {
+    super(manager);
+  }
+  load(url, onLoad, onProgress, onError) {
+    const scope = this;
+    const loader = new FileLoader(this.manager);
+    loader.setPath(this.path);
+    loader.setResponseType("arraybuffer");
+    loader.setRequestHeader(this.requestHeader);
+    loader.setWithCredentials(this.withCredentials);
+    loader.load(url, function(text) {
+      try {
+        onLoad(scope.parse(text));
+      } catch (e) {
+        if (onError) {
+          onError(e);
+        } else {
+          console.error(e);
+        }
+        scope.manager.itemError(url);
+      }
+    }, onProgress, onError);
+  }
+  parse(data) {
+    function isBinary(data2) {
+      const reader = new DataView(data2);
+      const face_size = 32 / 8 * 3 + 32 / 8 * 3 * 3 + 16 / 8;
+      const n_faces = reader.getUint32(80, true);
+      const expect = 80 + 32 / 8 + n_faces * face_size;
+      if (expect === reader.byteLength) {
+        return true;
+      }
+      const solid = [115, 111, 108, 105, 100];
+      for (let off = 0;off < 5; off++) {
+        if (matchDataViewAt(solid, reader, off))
+          return false;
+      }
+      return true;
+    }
+    function matchDataViewAt(query, reader, offset) {
+      for (let i = 0, il = query.length;i < il; i++) {
+        if (query[i] !== reader.getUint8(offset + i))
+          return false;
+      }
+      return true;
+    }
+    function parseBinary(data2) {
+      const reader = new DataView(data2);
+      const faces = reader.getUint32(80, true);
+      let r, g, b, hasColors = false, colors;
+      let defaultR, defaultG, defaultB, alpha;
+      for (let index = 0;index < 80 - 10; index++) {
+        if (reader.getUint32(index, false) == 1129270351 && reader.getUint8(index + 4) == 82 && reader.getUint8(index + 5) == 61) {
+          hasColors = true;
+          colors = new Float32Array(faces * 3 * 3);
+          defaultR = reader.getUint8(index + 6) / 255;
+          defaultG = reader.getUint8(index + 7) / 255;
+          defaultB = reader.getUint8(index + 8) / 255;
+          alpha = reader.getUint8(index + 9) / 255;
+        }
+      }
+      const dataOffset = 84;
+      const faceLength = 12 * 4 + 2;
+      const geometry = new BufferGeometry;
+      const vertices = new Float32Array(faces * 3 * 3);
+      const normals = new Float32Array(faces * 3 * 3);
+      const color = new Color;
+      for (let face = 0;face < faces; face++) {
+        const start = dataOffset + face * faceLength;
+        const normalX = reader.getFloat32(start, true);
+        const normalY = reader.getFloat32(start + 4, true);
+        const normalZ = reader.getFloat32(start + 8, true);
+        if (hasColors) {
+          const packedColor = reader.getUint16(start + 48, true);
+          if ((packedColor & 32768) === 0) {
+            r = (packedColor & 31) / 31;
+            g = (packedColor >> 5 & 31) / 31;
+            b = (packedColor >> 10 & 31) / 31;
+          } else {
+            r = defaultR;
+            g = defaultG;
+            b = defaultB;
+          }
+        }
+        for (let i = 1;i <= 3; i++) {
+          const vertexstart = start + i * 12;
+          const componentIdx = face * 3 * 3 + (i - 1) * 3;
+          vertices[componentIdx] = reader.getFloat32(vertexstart, true);
+          vertices[componentIdx + 1] = reader.getFloat32(vertexstart + 4, true);
+          vertices[componentIdx + 2] = reader.getFloat32(vertexstart + 8, true);
+          normals[componentIdx] = normalX;
+          normals[componentIdx + 1] = normalY;
+          normals[componentIdx + 2] = normalZ;
+          if (hasColors) {
+            color.setRGB(r, g, b, SRGBColorSpace);
+            colors[componentIdx] = color.r;
+            colors[componentIdx + 1] = color.g;
+            colors[componentIdx + 2] = color.b;
+          }
+        }
+      }
+      geometry.setAttribute("position", new BufferAttribute(vertices, 3));
+      geometry.setAttribute("normal", new BufferAttribute(normals, 3));
+      if (hasColors) {
+        geometry.setAttribute("color", new BufferAttribute(colors, 3));
+        geometry.hasColors = true;
+        geometry.alpha = alpha;
+      }
+      return geometry;
+    }
+    function parseASCII(data2) {
+      const geometry = new BufferGeometry;
+      const patternSolid = /solid([\s\S]*?)endsolid/g;
+      const patternFace = /facet([\s\S]*?)endfacet/g;
+      const patternName = /solid\s(.+)/;
+      let faceCounter = 0;
+      const patternFloat = /[\s]+([+-]?(?:\d*)(?:\.\d*)?(?:[eE][+-]?\d+)?)/.source;
+      const patternVertex = new RegExp("vertex" + patternFloat + patternFloat + patternFloat, "g");
+      const patternNormal = new RegExp("normal" + patternFloat + patternFloat + patternFloat, "g");
+      const vertices = [];
+      const normals = [];
+      const groupNames = [];
+      const normal = new Vector3;
+      let result;
+      let groupCount = 0;
+      let startVertex = 0;
+      let endVertex = 0;
+      while ((result = patternSolid.exec(data2)) !== null) {
+        startVertex = endVertex;
+        const solid = result[0];
+        const name = (result = patternName.exec(solid)) !== null ? result[1] : "";
+        groupNames.push(name);
+        while ((result = patternFace.exec(solid)) !== null) {
+          let vertexCountPerFace = 0;
+          let normalCountPerFace = 0;
+          const text = result[0];
+          while ((result = patternNormal.exec(text)) !== null) {
+            normal.x = parseFloat(result[1]);
+            normal.y = parseFloat(result[2]);
+            normal.z = parseFloat(result[3]);
+            normalCountPerFace++;
+          }
+          while ((result = patternVertex.exec(text)) !== null) {
+            vertices.push(parseFloat(result[1]), parseFloat(result[2]), parseFloat(result[3]));
+            normals.push(normal.x, normal.y, normal.z);
+            vertexCountPerFace++;
+            endVertex++;
+          }
+          if (normalCountPerFace !== 1) {
+            console.error("THREE.STLLoader: Something isn't right with the normal of face number " + faceCounter);
+          }
+          if (vertexCountPerFace !== 3) {
+            console.error("THREE.STLLoader: Something isn't right with the vertices of face number " + faceCounter);
+          }
+          faceCounter++;
+        }
+        const start = startVertex;
+        const count = endVertex - startVertex;
+        geometry.userData.groupNames = groupNames;
+        geometry.addGroup(start, count, groupCount);
+        groupCount++;
+      }
+      geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+      geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+      return geometry;
+    }
+    function ensureString(buffer) {
+      if (typeof buffer !== "string") {
+        return new TextDecoder().decode(buffer);
+      }
+      return buffer;
+    }
+    function ensureBinary(buffer) {
+      if (typeof buffer === "string") {
+        const array_buffer = new Uint8Array(buffer.length);
+        for (let i = 0;i < buffer.length; i++) {
+          array_buffer[i] = buffer.charCodeAt(i) & 255;
+        }
+        return array_buffer.buffer || array_buffer;
+      } else {
+        return buffer;
+      }
+    }
+    const binData = ensureBinary(data);
+    return isBinary(binData) ? parseBinary(binData) : parseASCII(ensureString(data));
+  }
+}
+
 // src/scene.ts
 var HEIGHT = window.innerHeight;
 var WIDTH = window.innerWidth;
@@ -25352,6 +25807,13 @@ var saturnPlanet;
 var marsPlanet;
 var saturnMaterial;
 var characters = [];
+var spaceLlama;
+var llamaState;
+var llamaOrbitAngle = 0;
+var llamaTravelProgress = 0;
+var llamaOrbitTimer = 0;
+var ORBIT_DURATION = 360;
+var ORBIT_RADIUS = 100;
 var closeStars;
 var distantStars;
 function flipCoin() {
@@ -25448,7 +25910,7 @@ function createCosmos() {
 }
 function createMarsPlanet() {
   const mesh = new Object3D;
-  const marsGeom = new DodecahedronGeometry(40, 2);
+  const marsGeom = new DodecahedronGeometry(46, 2);
   const marsMat = new MeshPhongMaterial({
     shininess: 15,
     color: 12665870,
@@ -25496,7 +25958,7 @@ function createMarsPlanet() {
 }
 function createSaturnPlanet() {
   const mesh = new Object3D;
-  const saturnGeom = new DodecahedronGeometry(70, 2);
+  const saturnGeom = new DodecahedronGeometry(80.5, 2);
   saturnMaterial = new MeshPhongMaterial({
     shininess: 25,
     color: 16739229,
@@ -25506,14 +25968,14 @@ function createSaturnPlanet() {
   saturnSphere.receiveShadow = true;
   saturnSphere.castShadow = true;
   mesh.add(saturnSphere);
-  const ringGeom = new RingGeometry(85, 110, 32);
+  const ringGeom = new RingGeometry(98, 127, 32);
   const pos = ringGeom.attributes.position;
   const uv = ringGeom.attributes.uv;
   for (let i = 0;i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
     const radius = Math.sqrt(x * x + y * y);
-    uv.setXY(i, (radius - 85) / 25, 0);
+    uv.setXY(i, (radius - 98) / 29, 0);
   }
   const ringMat = new MeshPhongMaterial({
     shininess: 30,
@@ -25526,7 +25988,7 @@ function createSaturnPlanet() {
   const ring = new Mesh(ringGeom, ringMat);
   ring.rotation.x = Math.PI / 2.5;
   mesh.add(ring);
-  const innerRingGeom = new RingGeometry(75, 82, 24);
+  const innerRingGeom = new RingGeometry(86, 94, 24);
   const innerRingMat = new MeshPhongMaterial({
     shininess: 30,
     color: 16757575,
@@ -25715,6 +26177,85 @@ function createHedgehog() {
   mesh.scale.set(1.5, 1.5, 1.5);
   return mesh;
 }
+function createRocket() {
+  const rocket = new Object3D;
+  const bodyGeom = new CylinderGeometry(1.5, 1.5, 6, 8);
+  const bodyMat = new MeshPhongMaterial({
+    shininess: 80,
+    color: 12632256,
+    flatShading: true
+  });
+  const body = new Mesh(bodyGeom, bodyMat);
+  body.rotation.z = Math.PI / 2;
+  rocket.add(body);
+  const noseGeom = new ConeGeometry(1.5, 3, 8);
+  const noseMat = new MeshPhongMaterial({
+    shininess: 50,
+    color: 16737792,
+    flatShading: true
+  });
+  const nose = new Mesh(noseGeom, noseMat);
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 4.5;
+  rocket.add(nose);
+  const finGeom = new ConeGeometry(1.5, 3, 4);
+  const finMat = new MeshPhongMaterial({
+    shininess: 30,
+    color: 16724736,
+    flatShading: true
+  });
+  const finTop = new Mesh(finGeom, finMat);
+  finTop.position.set(-2, 1.5, 0);
+  finTop.rotation.z = Math.PI / 2;
+  rocket.add(finTop);
+  const finBottom = new Mesh(finGeom, finMat);
+  finBottom.position.set(-2, -1.5, 0);
+  finBottom.rotation.z = Math.PI / 2;
+  rocket.add(finBottom);
+  const finLeft = new Mesh(finGeom, finMat);
+  finLeft.position.set(-2, 0, 1.5);
+  finLeft.rotation.y = Math.PI / 2;
+  finLeft.rotation.z = Math.PI / 2;
+  rocket.add(finLeft);
+  const finRight = new Mesh(finGeom, finMat);
+  finRight.position.set(-2, 0, -1.5);
+  finRight.rotation.y = Math.PI / 2;
+  finRight.rotation.z = Math.PI / 2;
+  rocket.add(finRight);
+  return rocket;
+}
+async function createSpaceLlama() {
+  const loader = new STLLoader;
+  const geometry = await loader.loadAsync("assets/3d_llama.stl");
+  const optimizedGeometry = mergeVertices(geometry, 0.1);
+  optimizedGeometry.computeVertexNormals();
+  const llamaMat = new MeshPhongMaterial({
+    shininess: 30,
+    color: 16777215,
+    flatShading: true
+  });
+  const llama = new Mesh(optimizedGeometry, llamaMat);
+  llama.castShadow = true;
+  llama.receiveShadow = true;
+  llama.scale.set(0.15, 0.15, 0.15);
+  llama.rotation.y = Math.PI;
+  const fleshMat = new MeshPhongMaterial({
+    shininess: 40,
+    color: 16738740,
+    flatShading: true
+  });
+  const noseGeom = new SphereGeometry(1.5, 8, 8);
+  const nose = new Mesh(noseGeom, fleshMat);
+  nose.position.set(0, 2, 8);
+  llama.add(nose);
+  const llamaGroup = new Object3D;
+  llamaGroup.add(llama);
+  const rocket = createRocket();
+  rocket.position.set(0, 8, -3);
+  rocket.scale.set(1.5, 1.5, 1.5);
+  llamaGroup.add(rocket);
+  return llamaGroup;
+}
 function addCharactersToMars() {
   const penguin = createPenguin();
   penguin.position.set(0, 40, 0);
@@ -25785,7 +26326,88 @@ function initScene() {
   scene.add(marsPlanet);
   addCharactersToMars();
   createCharacters();
+  llamaState = "orbitingSaturn";
+  llamaOrbitAngle = 0;
+  createSpaceLlama().then((llama) => {
+    spaceLlama = llama;
+    scene.add(spaceLlama);
+    spaceLlama.position.set(saturnX + ORBIT_RADIUS, saturnY, -80);
+  });
   render();
+}
+function updateLlama() {
+  if (!spaceLlama || !saturnPlanet || !marsPlanet)
+    return;
+  const saturnPos = saturnPlanet.position.clone();
+  const marsPos = marsPlanet.position.clone();
+  switch (llamaState) {
+    case "orbitingSaturn":
+      llamaOrbitAngle += 0.02;
+      spaceLlama.position.x = saturnPos.x + Math.cos(llamaOrbitAngle) * ORBIT_RADIUS;
+      spaceLlama.position.y = saturnPos.y + Math.sin(llamaOrbitAngle) * ORBIT_RADIUS * 0.3;
+      spaceLlama.position.z = saturnPos.z + 20;
+      spaceLlama.rotation.y = llamaOrbitAngle + Math.PI / 2;
+      llamaOrbitTimer++;
+      if (llamaOrbitTimer > ORBIT_DURATION) {
+        llamaState = "travelingToMars";
+        llamaTravelProgress = 0;
+        llamaOrbitTimer = 0;
+      }
+      break;
+    case "travelingToMars":
+      llamaTravelProgress += 0.01;
+      const t = Math.min(llamaTravelProgress, 1);
+      const p0 = saturnPos.clone();
+      const p2 = marsPos.clone();
+      const p1 = new Vector3((p0.x + p2.x) / 2, (p0.y + p2.y) / 2 + 150, p0.z - 50);
+      const invT = 1 - t;
+      spaceLlama.position.x = invT * invT * p0.x + 2 * invT * t * p1.x + t * t * p2.x;
+      spaceLlama.position.y = invT * invT * p0.y + 2 * invT * t * p1.y + t * t * p2.y;
+      spaceLlama.position.z = invT * invT * p0.z + 2 * invT * t * p1.z + t * t * p2.z;
+      const nextT = Math.min(t + 0.01, 1);
+      const nextInvT = 1 - nextT;
+      const nextPos = new Vector3(nextInvT * nextInvT * p0.x + 2 * nextInvT * nextT * p1.x + nextT * nextT * p2.x, nextInvT * nextInvT * p0.y + 2 * nextInvT * nextT * p1.y + nextT * nextT * p2.y, nextInvT * nextInvT * p0.z + 2 * nextInvT * nextT * p1.z + nextT * nextT * p2.z);
+      spaceLlama.lookAt(nextPos);
+      if (t >= 1) {
+        llamaState = "orbitingMars";
+        llamaOrbitAngle = 0;
+        llamaOrbitTimer = 0;
+      }
+      break;
+    case "orbitingMars":
+      llamaOrbitAngle += 0.02;
+      spaceLlama.position.x = marsPos.x + Math.cos(llamaOrbitAngle) * ORBIT_RADIUS * 0.7;
+      spaceLlama.position.y = marsPos.y + Math.sin(llamaOrbitAngle) * ORBIT_RADIUS * 0.3;
+      spaceLlama.position.z = marsPos.z + 20;
+      spaceLlama.rotation.y = llamaOrbitAngle + Math.PI / 2;
+      llamaOrbitTimer++;
+      if (llamaOrbitTimer > ORBIT_DURATION) {
+        llamaState = "travelingToSaturn";
+        llamaTravelProgress = 0;
+        llamaOrbitTimer = 0;
+      }
+      break;
+    case "travelingToSaturn":
+      llamaTravelProgress += 0.01;
+      const t2 = Math.min(llamaTravelProgress, 1);
+      const p0_2 = marsPos.clone();
+      const p2_2 = saturnPos.clone();
+      const p1_2 = new Vector3((p0_2.x + p2_2.x) / 2, (p0_2.y + p2_2.y) / 2 - 150, p0_2.z - 50);
+      const invT2 = 1 - t2;
+      spaceLlama.position.x = invT2 * invT2 * p0_2.x + 2 * invT2 * t2 * p1_2.x + t2 * t2 * p2_2.x;
+      spaceLlama.position.y = invT2 * invT2 * p0_2.y + 2 * invT2 * t2 * p1_2.y + t2 * t2 * p2_2.y;
+      spaceLlama.position.z = invT2 * invT2 * p0_2.z + 2 * invT2 * t2 * p1_2.z + t2 * t2 * p2_2.z;
+      const nextT2 = Math.min(t2 + 0.01, 1);
+      const nextInvT2 = 1 - nextT2;
+      const nextPos2 = new Vector3(nextInvT2 * nextInvT2 * p0_2.x + 2 * nextInvT2 * nextT2 * p1_2.x + nextT2 * nextT2 * p2_2.x, nextInvT2 * nextInvT2 * p0_2.y + 2 * nextInvT2 * nextT2 * p1_2.y + nextT2 * nextT2 * p2_2.y, nextInvT2 * nextInvT2 * p0_2.z + 2 * nextInvT2 * nextT2 * p1_2.z + nextT2 * nextT2 * p2_2.z);
+      spaceLlama.lookAt(nextPos2);
+      if (t2 >= 1) {
+        llamaState = "orbitingSaturn";
+        llamaOrbitAngle = 0;
+        llamaOrbitTimer = 0;
+      }
+      break;
+  }
 }
 function render() {
   closeStars.mesh.rotation.y += 0.00003;
@@ -25805,6 +26427,7 @@ function render() {
     char.pivot.rotation.y += char.speed;
     char.mesh.rotation.y += 0.01;
   });
+  updateLlama();
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
