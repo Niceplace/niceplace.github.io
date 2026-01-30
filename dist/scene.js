@@ -25789,8 +25789,11 @@ function initScene() {
 }
 function render() {
   closeStars.mesh.rotation.y += 0.00003;
-  closeStars.mesh.children.forEach((star) => {
-    star.material.opacity = Math.sin(Date.now() * 0.001) / 2 + 0.5;
+  closeStars.mesh.children.forEach((child) => {
+    if (child.material) {
+      const star = child;
+      star.material.opacity = Math.sin(Date.now() * 0.001) / 2 + 0.5;
+    }
   });
   distantStars.rotation.y += 0.00002;
   distantStars.rotation.x += 0.00003;

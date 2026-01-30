@@ -623,8 +623,11 @@ function initScene(): void {
 function render(): void {
     // Animate stars
     closeStars.mesh.rotation.y += 0.00003;
-    closeStars.mesh.children.forEach((star: THREE.Mesh) => {
-        (star.material as THREE.MeshPhongMaterial).opacity = (Math.sin(Date.now() * 0.001)) / 2 + 0.5;
+    closeStars.mesh.children.forEach((child) => {
+        if ((child as THREE.Mesh).material) {
+            const star = child as THREE.Mesh;
+            (star.material as THREE.MeshPhongMaterial).opacity = (Math.sin(Date.now() * 0.001)) / 2 + 0.5;
+        }
     });
     distantStars.rotation.y += 0.00002;
     distantStars.rotation.x += 0.00003;
