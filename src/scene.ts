@@ -603,7 +603,7 @@ async function createSpaceLlama(): Promise<THREE.Object3D> {
 
     // Rotate to face forward and stand upright
     llama.rotation.y = Math.PI;
-    llama.rotation.x = -Math.PI / 2; // Stand upright (legs down, head up)
+    llama.rotation.x = Math.PI / 2; // Stand upright (180° flip from previous)
 
     // Add pink accents for flesh (nose, inner ears)
     // Create small pink spheres for visible flesh areas

@@ -26239,7 +26239,7 @@ async function createSpaceLlama() {
   llama.receiveShadow = true;
   llama.scale.set(0.3, 0.3, 0.3);
   llama.rotation.y = Math.PI;
-  llama.rotation.x = -Math.PI / 2;
+  llama.rotation.x = Math.PI / 2;
   const fleshMat = new MeshPhongMaterial({
     shininess: 40,
     color: 16738740,
