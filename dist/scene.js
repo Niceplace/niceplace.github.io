@@ -25808,13 +25808,10 @@ function render() {
 window.onload = () => {
   HEIGHT = window.innerHeight;
   WIDTH = window.innerWidth;
-  const canvas = document.getElementById("myCanvas");
-  canvas.style.width = WIDTH + "px";
-  canvas.style.height = HEIGHT + "px";
   renderer.setSize(WIDTH, HEIGHT);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   camera.aspect = WIDTH / HEIGHT;
   camera.updateProjectionMatrix();
-  console.log("Canvas size:", WIDTH, "x", HEIGHT);
   initScene();
 };
 window.addEventListener("resize", handleWindowResize, false);

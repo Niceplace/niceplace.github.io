@@ -656,15 +656,12 @@ window.onload = () => {
     HEIGHT = window.innerHeight;
     WIDTH = window.innerWidth;
 
-    // Ensure canvas display size matches window
-    const canvas = document.getElementById('myCanvas') as HTMLCanvasElement;
-    canvas.style.width = WIDTH + 'px';
-    canvas.style.height = HEIGHT + 'px';
-
+    // Set canvas display size using CSS (already handled by CSS width/height: 100%)
+    // Set internal resolution to match window size
     renderer.setSize(WIDTH, HEIGHT);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap at 2x for performance
     camera.aspect = WIDTH / HEIGHT;
     camera.updateProjectionMatrix();
-    console.log('Canvas size:', WIDTH, 'x', HEIGHT);
 
     initScene();
 };
