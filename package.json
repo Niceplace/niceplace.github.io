@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun build src/earth.ts --outdir dist --target browser",
-    "dev": "bun --watch src/earth.ts",
+    "build": "bun build src/scene.ts --outdir dist --target browser",
+    "dev": "bun --watch src/scene.ts",
     "test": "bun run test.ts"
   },
   "devDependencies": {
