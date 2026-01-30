@@ -25986,7 +25986,7 @@ function createSaturnPlanet() {
     flatShading: true
   });
   const ring = new Mesh(ringGeom, ringMat);
-  ring.rotation.x = Math.PI / 2.5;
+  ring.rotation.x = Math.PI / 3.5;
   mesh.add(ring);
   const innerRingGeom = new RingGeometry(86, 94, 24);
   const innerRingMat = new MeshPhongMaterial({
@@ -25998,7 +25998,7 @@ function createSaturnPlanet() {
     flatShading: true
   });
   const innerRing = new Mesh(innerRingGeom, innerRingMat);
-  innerRing.rotation.x = Math.PI / 2.5;
+  innerRing.rotation.x = Math.PI / 3.5;
   mesh.add(innerRing);
   return mesh;
 }
@@ -26239,6 +26239,7 @@ async function createSpaceLlama() {
   llama.receiveShadow = true;
   llama.scale.set(0.3, 0.3, 0.3);
   llama.rotation.y = Math.PI;
+  llama.rotation.x = -Math.PI / 2;
   const fleshMat = new MeshPhongMaterial({
     shininess: 40,
     color: 16738740,
@@ -26251,7 +26252,8 @@ async function createSpaceLlama() {
   const llamaGroup = new Object3D;
   llamaGroup.add(llama);
   const rocket = createRocket();
-  rocket.position.set(0, 8, -3);
+  rocket.position.set(0, 0, 8);
+  rocket.rotation.x = Math.PI / 2;
   rocket.scale.set(1.5, 1.5, 1.5);
   llamaGroup.add(rocket);
   return llamaGroup;

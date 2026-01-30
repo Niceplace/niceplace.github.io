@@ -271,7 +271,7 @@ function createSaturnPlanet(): THREE.Object3D {
         flatShading: true
     });
     const ring = new THREE.Mesh(ringGeom, ringMat);
-    ring.rotation.x = Math.PI / 2.5; // Tilt the ring
+    ring.rotation.x = Math.PI / 3.5; // Tilt the ring for better visibility
     mesh.add(ring);
 
     // Add a second inner ring for detail (15% larger)
@@ -285,7 +285,7 @@ function createSaturnPlanet(): THREE.Object3D {
         flatShading: true
     });
     const innerRing = new THREE.Mesh(innerRingGeom, innerRingMat);
-    innerRing.rotation.x = Math.PI / 2.5;
+    innerRing.rotation.x = Math.PI / 3.5; // Match outer ring tilt
     mesh.add(innerRing);
 
     return mesh;
@@ -601,8 +601,9 @@ async function createSpaceLlama(): Promise<THREE.Object3D> {
     // Scale appropriately (STL files often need significant scaling)
     llama.scale.set(0.30, 0.30, 0.30);
 
-    // Rotate to face forward
+    // Rotate to face forward and stand upright
     llama.rotation.y = Math.PI;
+    llama.rotation.x = -Math.PI / 2; // Stand upright (legs down, head up)
 
     // Add pink accents for flesh (nose, inner ears)
     // Create small pink spheres for visible flesh areas
@@ -624,7 +625,8 @@ async function createSpaceLlama(): Promise<THREE.Object3D> {
 
     // Add rocket on llama's back
     const rocket = createRocket();
-    rocket.position.set(0, 8, -3); // Position on back
+    rocket.position.set(0, 0, 8); // Position on back (adjusted for upright llama)
+    rocket.rotation.x = Math.PI / 2; // Keep rocket horizontal
     rocket.scale.set(1.5, 1.5, 1.5); // Scale appropriately
     llamaGroup.add(rocket);
 

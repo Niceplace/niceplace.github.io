@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "build": "bun build src/scene.ts --outdir dist --target browser",
-    "dev": "bun --watch src/scene.ts",
+    "dev": "bun run dev-server.ts",
     "test": "bun run test.ts"
   },
   "devDependencies": {
