@@ -41,7 +41,7 @@ let llamaOrbitAngle: number = 0;
 let llamaTravelProgress: number = 0;
 let llamaOrbitTimer: number = 0;
 const ORBIT_DURATION = 360; // ~6 seconds at 60fps
-const ORBIT_RADIUS = 100; // Distance from planet center
+const ORBIT_RADIUS = 180; // Distance from planet center (increased to avoid collision)
 
 // Star objects
 let closeStars: { mesh: THREE.Object3D; mat: THREE.MeshPhongMaterial };
@@ -599,7 +599,7 @@ async function createSpaceLlama(): Promise<THREE.Object3D> {
     llama.receiveShadow = true;
 
     // Scale appropriately (STL files often need significant scaling)
-    llama.scale.set(0.15, 0.15, 0.15);
+    llama.scale.set(0.30, 0.30, 0.30);
 
     // Rotate to face forward
     llama.rotation.y = Math.PI;

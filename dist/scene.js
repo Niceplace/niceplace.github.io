@@ -25813,7 +25813,7 @@ var llamaOrbitAngle = 0;
 var llamaTravelProgress = 0;
 var llamaOrbitTimer = 0;
 var ORBIT_DURATION = 360;
-var ORBIT_RADIUS = 100;
+var ORBIT_RADIUS = 180;
 var closeStars;
 var distantStars;
 function flipCoin() {
@@ -26237,7 +26237,7 @@ async function createSpaceLlama() {
   const llama = new Mesh(optimizedGeometry, llamaMat);
   llama.castShadow = true;
   llama.receiveShadow = true;
-  llama.scale.set(0.15, 0.15, 0.15);
+  llama.scale.set(0.3, 0.3, 0.3);
   llama.rotation.y = Math.PI;
   const fleshMat = new MeshPhongMaterial({
     shininess: 40,
