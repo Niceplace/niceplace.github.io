@@ -50,9 +50,36 @@ function flipCoin(): number {
 function handleWindowResize(): void {
     HEIGHT = window.innerHeight;
     WIDTH = window.innerWidth;
+
+    // Update canvas size
     renderer.setSize(WIDTH, HEIGHT);
     camera.aspect = WIDTH / HEIGHT;
     camera.updateProjectionMatrix();
+
+    // Recalculate planet positions for new window size
+    updatePlanetPositions();
+}
+
+// Update planet positions based on current window size
+function updatePlanetPositions(): void {
+    const visibleHeight = 2 * 500 * Math.tan((60 * Math.PI) / 180 / 2);
+    const visibleWidth = visibleHeight * (WIDTH / HEIGHT);
+
+    // Saturn: bottom-left (10% from left, 10% from bottom)
+    const saturnX = -visibleWidth * 0.4;
+    const saturnY = -visibleHeight * 0.4;
+
+    // Mars: upper-right (10% from right, 10% from top)
+    const marsX = visibleWidth * 0.4;
+    const marsY = visibleHeight * 0.4;
+
+    if (saturnPlanet) {
+        saturnPlanet.position.set(saturnX, saturnY, -100);
+    }
+
+    if (marsPlanet) {
+        marsPlanet.position.set(marsX, marsY, -100);
+    }
 }
 
 // === LIGHTING ===
@@ -476,6 +503,23 @@ function createHedgehog(): THREE.Object3D {
 }
 
 // === CREATE CHARACTERS ===
+// === ADD CHARACTERS TO MARS POLES ===
+function addCharactersToMars(): void {
+    // Add penguin to North pole of Mars
+    const penguin = createPenguin();
+    // Mars radius is 40, so position on top
+    penguin.position.set(0, 40, 0);
+    penguin.scale.set(0.8, 0.8, 0.8); // Smaller for Mars
+    marsPlanet.add(penguin);
+
+    // Add hedgehog to South pole of Mars
+    const hedgehog = createHedgehog();
+    hedgehog.position.set(0, -40, 0);
+    hedgehog.scale.set(0.8, 0.8, 0.8); // Smaller for Mars
+    marsPlanet.add(hedgehog);
+}
+
+// === CREATE CHARACTERS (for Saturn orbit) ===
 function createCharacters(): void {
     // Create penguins
     for (let i = 0; i < 2; i++) {
@@ -533,22 +577,41 @@ function updateSaturnColor(): void {
 
 // === INITIALIZE SCENE ===
 function initScene(): void {
-    // Position camera to see both planets
-    camera.position.set(0, 0, 600);
+    // Calculate positions based on viewport with 10% margin from corners
+    // Visible range at z=0 with camera at z=500 and FOV=60:
+    // height = 2 * 500 * tan(30°) ≈ 577 units
+    // width = height * aspect ratio
+
+    const visibleHeight = 2 * 500 * Math.tan((60 * Math.PI) / 180 / 2);
+    const visibleWidth = visibleHeight * (WIDTH / HEIGHT);
+
+    // Saturn: bottom-left (10% from left, 10% from bottom)
+    const saturnX = -visibleWidth * 0.4;
+    const saturnY = -visibleHeight * 0.4;
+
+    // Mars: upper-right (10% from right, 10% from top)
+    const marsX = visibleWidth * 0.4;
+    const marsY = visibleHeight * 0.4;
+
+    // Camera position
+    camera.position.set(0, 0, 500);
     camera.lookAt(0, 0, 0);
 
     createLights();
     createCosmos();
 
-    // Create Saturn planet (bottom-left)
+    // Create Saturn planet (bottom-left corner)
     saturnPlanet = createSaturnPlanet();
-    saturnPlanet.position.set(-250, -150, -200);
+    saturnPlanet.position.set(saturnX, saturnY, -100);
     scene.add(saturnPlanet);
 
-    // Create Mars planet (upper-right)
+    // Create Mars planet (upper-right corner)
     marsPlanet = createMarsPlanet();
-    marsPlanet.position.set(180, 120, -300);
+    marsPlanet.position.set(marsX, marsY, -100);
     scene.add(marsPlanet);
+
+    // Add characters to Mars poles
+    addCharactersToMars();
 
     // Create characters orbiting Saturn
     createCharacters();
@@ -588,5 +651,21 @@ function render(): void {
 }
 
 // === START ===
-window.onload = initScene;
+window.onload = () => {
+    // Update canvas size on load to ensure correct dimensions
+    HEIGHT = window.innerHeight;
+    WIDTH = window.innerWidth;
+
+    // Ensure canvas display size matches window
+    const canvas = document.getElementById('myCanvas') as HTMLCanvasElement;
+    canvas.style.width = WIDTH + 'px';
+    canvas.style.height = HEIGHT + 'px';
+
+    renderer.setSize(WIDTH, HEIGHT);
+    camera.aspect = WIDTH / HEIGHT;
+    camera.updateProjectionMatrix();
+    console.log('Canvas size:', WIDTH, 'x', HEIGHT);
+
+    initScene();
+};
 window.addEventListener('resize', handleWindowResize, false);

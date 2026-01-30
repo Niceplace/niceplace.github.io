@@ -25368,6 +25368,21 @@ function handleWindowResize() {
   renderer.setSize(WIDTH, HEIGHT);
   camera.aspect = WIDTH / HEIGHT;
   camera.updateProjectionMatrix();
+  updatePlanetPositions();
+}
+function updatePlanetPositions() {
+  const visibleHeight = 2 * 500 * Math.tan(60 * Math.PI / 180 / 2);
+  const visibleWidth = visibleHeight * (WIDTH / HEIGHT);
+  const saturnX = -visibleWidth * 0.4;
+  const saturnY = -visibleHeight * 0.4;
+  const marsX = visibleWidth * 0.4;
+  const marsY = visibleHeight * 0.4;
+  if (saturnPlanet) {
+    saturnPlanet.position.set(saturnX, saturnY, -100);
+  }
+  if (marsPlanet) {
+    marsPlanet.position.set(marsX, marsY, -100);
+  }
 }
 function createLights() {
   ambientLight = new AmbientLight(15062485);
@@ -25700,6 +25715,16 @@ function createHedgehog() {
   mesh.scale.set(1.5, 1.5, 1.5);
   return mesh;
 }
+function addCharactersToMars() {
+  const penguin = createPenguin();
+  penguin.position.set(0, 40, 0);
+  penguin.scale.set(0.8, 0.8, 0.8);
+  marsPlanet.add(penguin);
+  const hedgehog = createHedgehog();
+  hedgehog.position.set(0, -40, 0);
+  hedgehog.scale.set(0.8, 0.8, 0.8);
+  marsPlanet.add(hedgehog);
+}
 function createCharacters() {
   for (let i = 0;i < 2; i++) {
     const pivot = new Object3D;
@@ -25742,16 +25767,23 @@ function updateSaturnColor() {
   saturnMaterial.color = color;
 }
 function initScene() {
-  camera.position.set(0, 0, 600);
+  const visibleHeight = 2 * 500 * Math.tan(60 * Math.PI / 180 / 2);
+  const visibleWidth = visibleHeight * (WIDTH / HEIGHT);
+  const saturnX = -visibleWidth * 0.4;
+  const saturnY = -visibleHeight * 0.4;
+  const marsX = visibleWidth * 0.4;
+  const marsY = visibleHeight * 0.4;
+  camera.position.set(0, 0, 500);
   camera.lookAt(0, 0, 0);
   createLights();
   createCosmos();
   saturnPlanet = createSaturnPlanet();
-  saturnPlanet.position.set(-250, -150, -200);
+  saturnPlanet.position.set(saturnX, saturnY, -100);
   scene.add(saturnPlanet);
   marsPlanet = createMarsPlanet();
-  marsPlanet.position.set(180, 120, -300);
+  marsPlanet.position.set(marsX, marsY, -100);
   scene.add(marsPlanet);
+  addCharactersToMars();
   createCharacters();
   render();
 }
@@ -25773,5 +25805,16 @@ function render() {
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
-window.onload = initScene;
+window.onload = () => {
+  HEIGHT = window.innerHeight;
+  WIDTH = window.innerWidth;
+  const canvas = document.getElementById("myCanvas");
+  canvas.style.width = WIDTH + "px";
+  canvas.style.height = HEIGHT + "px";
+  renderer.setSize(WIDTH, HEIGHT);
+  camera.aspect = WIDTH / HEIGHT;
+  camera.updateProjectionMatrix();
+  console.log("Canvas size:", WIDTH, "x", HEIGHT);
+  initScene();
+};
 window.addEventListener("resize", handleWindowResize, false);
