@@ -770,7 +770,7 @@ function updateLlama(): void {
     switch (llamaState) {
         case 'orbitingSaturn':
             // Orbit around Saturn
-            llamaOrbitAngle += 0.02;
+            llamaOrbitAngle += 0.0067;
             spaceLlama.position.x = saturnPos.x + Math.cos(llamaOrbitAngle) * ORBIT_RADIUS;
             spaceLlama.position.y = saturnPos.y + Math.sin(llamaOrbitAngle) * ORBIT_RADIUS * 0.3;
             spaceLlama.position.z = saturnPos.z + 20;
@@ -823,7 +823,7 @@ function updateLlama(): void {
 
         case 'orbitingMars':
             // Orbit around Mars
-            llamaOrbitAngle += 0.02;
+            llamaOrbitAngle += 0.0067;
             spaceLlama.position.x = marsPos.x + Math.cos(llamaOrbitAngle) * ORBIT_RADIUS * 0.7;
             spaceLlama.position.y = marsPos.y + Math.sin(llamaOrbitAngle) * ORBIT_RADIUS * 0.3;
             spaceLlama.position.z = marsPos.z + 20;
