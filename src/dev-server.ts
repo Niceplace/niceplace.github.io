@@ -1,5 +1,7 @@
 import { serve } from "bun";
 
+const PUBLIC_DIR = "public";
+
 serve({
   port: 3000,
   async fetch(req) {
@@ -7,12 +9,12 @@ serve({
 
     // Serve index.html at root
     if (url.pathname === "/" || url.pathname === "/index.html") {
-      return new Response(Bun.file("index.html"));
+      return new Response(Bun.file(`${PUBLIC_DIR}/index.html`));
     }
 
     // Serve CSS files
     if (url.pathname.startsWith("/css/")) {
-      return new Response(Bun.file("." + url.pathname));
+      return new Response(Bun.file(`${PUBLIC_DIR}${url.pathname}`));
     }
 
     // Serve dist/scene.js with HMR
@@ -27,8 +29,8 @@ serve({
     }
 
     // Serve assets (STL files, images, etc.)
-    if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/img/")) {
-      return new Response(Bun.file("." + url.pathname));
+    if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/img/") || url.pathname.startsWith("/cv/")) {
+      return new Response(Bun.file(`${PUBLIC_DIR}${url.pathname}`));
     }
 
     return new Response("Not found", { status: 404 });
