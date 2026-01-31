@@ -29,7 +29,7 @@ serve({
     }
 
     // Serve assets (STL files, images, etc.)
-    if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/img/") || url.pathname.startsWith("/cv/")) {
+    if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/img/") || url.pathname.startsWith("/resume/")) {
       return new Response(Bun.file(`${PUBLIC_DIR}${url.pathname}`));
     }
 
