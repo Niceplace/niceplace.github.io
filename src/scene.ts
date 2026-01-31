@@ -40,7 +40,7 @@ let llamaState: 'orbitingSaturn' | 'travelingToMars' | 'orbitingMars' | 'traveli
 let llamaOrbitAngle: number = 0;
 let llamaTravelProgress: number = 0;
 let llamaOrbitTimer: number = 0;
-const ORBIT_DURATION = 360; // ~6 seconds at 60fps
+const ORBIT_DURATION = 1080; // ~18 seconds at 60fps (3x slower)
 const ORBIT_RADIUS = 180; // Distance from planet center (increased to avoid collision)
 
 // Star objects
@@ -173,8 +173,8 @@ function createCosmos(): void {
 function createMarsPlanet(): THREE.Object3D {
     const mesh = new THREE.Object3D();
 
-    // Main sphere - reddish orange (15% larger)
-    const marsGeom = new THREE.DodecahedronGeometry(46, 2);
+    // Main sphere - reddish orange (25% larger than original)
+    const marsGeom = new THREE.DodecahedronGeometry(57.5, 2);
     const marsMat = new THREE.MeshPhongMaterial({
         shininess: 15,
         color: 0xC1440E, // Mars red
@@ -200,7 +200,7 @@ function createMarsPlanet(): THREE.Object3D {
         // Random position on sphere surface using spherical coordinates
         const phi = Math.random() * Math.PI * 2;
         const theta = Math.random() * Math.PI;
-        const radius = 38; // Slightly inside the surface
+        const radius = 47.5; // Slightly inside the surface (scaled 25%)
 
         crater.position.x = radius * Math.sin(theta) * Math.cos(phi);
         crater.position.y = radius * Math.sin(theta) * Math.sin(phi);
@@ -221,7 +221,7 @@ function createMarsPlanet(): THREE.Object3D {
 
         const phi = Math.random() * Math.PI * 2;
         const theta = Math.random() * Math.PI;
-        const radius = 39;
+        const radius = 48.75; // Scaled 25%
 
         highlight.position.x = radius * Math.sin(theta) * Math.cos(phi);
         highlight.position.y = radius * Math.sin(theta) * Math.sin(phi);
@@ -237,8 +237,8 @@ function createMarsPlanet(): THREE.Object3D {
 function createSaturnPlanet(): THREE.Object3D {
     const mesh = new THREE.Object3D();
 
-    // Main sphere - will have animated color (15% larger: 70 * 1.15 = 80.5)
-    const saturnGeom = new THREE.DodecahedronGeometry(80.5, 2);
+    // Main sphere - will have animated color (25% larger than original: 70 * 1.25 * 1.15 ≈ 100.6)
+    const saturnGeom = new THREE.DodecahedronGeometry(100.6, 2);
     saturnMaterial = new THREE.MeshPhongMaterial({
         shininess: 25,
         color: 0xFF6B9D, // Start with pink
@@ -249,8 +249,8 @@ function createSaturnPlanet(): THREE.Object3D {
     saturnSphere.castShadow = true;
     mesh.add(saturnSphere);
 
-    // Ring system (15% larger)
-    const ringGeom = new THREE.RingGeometry(98, 127, 32);
+    // Ring system (25% larger)
+    const ringGeom = new THREE.RingGeometry(122.5, 158.75, 32);
     const pos = ringGeom.attributes.position;
     const uv = ringGeom.attributes.uv;
 
@@ -259,7 +259,7 @@ function createSaturnPlanet(): THREE.Object3D {
         const x = pos.getX(i);
         const y = pos.getY(i);
         const radius = Math.sqrt(x * x + y * y);
-        uv.setXY(i, (radius - 98) / 29, 0);
+        uv.setXY(i, (radius - 122.5) / 36.25, 0);
     }
 
     const ringMat = new THREE.MeshPhongMaterial({
@@ -274,8 +274,8 @@ function createSaturnPlanet(): THREE.Object3D {
     ring.rotation.x = Math.PI / 3.5; // Tilt the ring for better visibility
     mesh.add(ring);
 
-    // Add a second inner ring for detail (15% larger)
-    const innerRingGeom = new THREE.RingGeometry(86, 94, 24);
+    // Add a second inner ring for detail (25% larger)
+    const innerRingGeom = new THREE.RingGeometry(107.5, 117.5, 24);
     const innerRingMat = new THREE.MeshPhongMaterial({
         shininess: 30,
         color: 0xFFB347, // Amber accent

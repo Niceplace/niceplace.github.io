@@ -25812,7 +25812,7 @@ var llamaState;
 var llamaOrbitAngle = 0;
 var llamaTravelProgress = 0;
 var llamaOrbitTimer = 0;
-var ORBIT_DURATION = 360;
+var ORBIT_DURATION = 1080;
 var ORBIT_RADIUS = 180;
 var closeStars;
 var distantStars;
@@ -25910,7 +25910,7 @@ function createCosmos() {
 }
 function createMarsPlanet() {
   const mesh = new Object3D;
-  const marsGeom = new DodecahedronGeometry(46, 2);
+  const marsGeom = new DodecahedronGeometry(57.5, 2);
   const marsMat = new MeshPhongMaterial({
     shininess: 15,
     color: 12665870,
@@ -25932,7 +25932,7 @@ function createMarsPlanet() {
     const crater = new Mesh(craterGeom, craterMat);
     const phi = Math.random() * Math.PI * 2;
     const theta = Math.random() * Math.PI;
-    const radius = 38;
+    const radius = 47.5;
     crater.position.x = radius * Math.sin(theta) * Math.cos(phi);
     crater.position.y = radius * Math.sin(theta) * Math.sin(phi);
     crater.position.z = radius * Math.cos(theta);
@@ -25948,7 +25948,7 @@ function createMarsPlanet() {
     const highlight = new Mesh(highlightGeom, highlightMat);
     const phi = Math.random() * Math.PI * 2;
     const theta = Math.random() * Math.PI;
-    const radius = 39;
+    const radius = 48.75;
     highlight.position.x = radius * Math.sin(theta) * Math.cos(phi);
     highlight.position.y = radius * Math.sin(theta) * Math.sin(phi);
     highlight.position.z = radius * Math.cos(theta);
@@ -25958,7 +25958,7 @@ function createMarsPlanet() {
 }
 function createSaturnPlanet() {
   const mesh = new Object3D;
-  const saturnGeom = new DodecahedronGeometry(80.5, 2);
+  const saturnGeom = new DodecahedronGeometry(100.6, 2);
   saturnMaterial = new MeshPhongMaterial({
     shininess: 25,
     color: 16739229,
@@ -25968,14 +25968,14 @@ function createSaturnPlanet() {
   saturnSphere.receiveShadow = true;
   saturnSphere.castShadow = true;
   mesh.add(saturnSphere);
-  const ringGeom = new RingGeometry(98, 127, 32);
+  const ringGeom = new RingGeometry(122.5, 158.75, 32);
   const pos = ringGeom.attributes.position;
   const uv = ringGeom.attributes.uv;
   for (let i = 0;i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
     const radius = Math.sqrt(x * x + y * y);
-    uv.setXY(i, (radius - 98) / 29, 0);
+    uv.setXY(i, (radius - 122.5) / 36.25, 0);
   }
   const ringMat = new MeshPhongMaterial({
     shininess: 30,
@@ -25988,7 +25988,7 @@ function createSaturnPlanet() {
   const ring = new Mesh(ringGeom, ringMat);
   ring.rotation.x = Math.PI / 3.5;
   mesh.add(ring);
-  const innerRingGeom = new RingGeometry(86, 94, 24);
+  const innerRingGeom = new RingGeometry(107.5, 117.5, 24);
   const innerRingMat = new MeshPhongMaterial({
     shininess: 30,
     color: 16757575,
