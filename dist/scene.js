@@ -26226,7 +26226,7 @@ function createRocket() {
 }
 async function createSpaceLlama() {
   const loader = new STLLoader;
-  const geometry = await loader.loadAsync("public/assets/3d_llama.stl");
+  const geometry = await loader.loadAsync("assets/3d_llama.stl");
   const optimizedGeometry = mergeVertices(geometry, 0.1);
   optimizedGeometry.computeVertexNormals();
   const llamaMat = new MeshPhongMaterial({

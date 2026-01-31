@@ -579,7 +579,7 @@ function createRocket(): THREE.Object3D {
 // === SPACE LLAMA ===
 async function createSpaceLlama(): Promise<THREE.Object3D> {
     const loader = new STLLoader();
-    const geometry = await loader.loadAsync('public/assets/3d_llama.stl');
+    const geometry = await loader.loadAsync('assets/3d_llama.stl');
 
     // Optimize geometry by merging vertices (reduces file size and improves performance)
     const optimizedGeometry = mergeVertices(geometry, 0.1);
